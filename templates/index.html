@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>CSVアップロード & DBビューア</title>
+</head>
+<body>
+    <h1>請求・入金CSV アップロード</h1>
+
+    <form method="POST" action="/upload" enctype="multipart/form-data">
+        <label>請求CSVファイル: <input type="file" name="bill_csv"></label><br><br>
+        <label>入金CSVファイル: <input type="file" name="payment_csv"></label><br><br>
+        <input type="submit" value="アップロード & DB登録">
+    </form>
+
+    <hr>
+
+    <form method="GET" action="/match">
+        <button type="submit">照合処理を実行</button>
+    </form>
+
+    <hr>
+
+    <!-- Viewerに飛ぶボタン -->
+    <form method="GET" action="{{ url_for('viewer') }}">
+	<button type="submit">DBビューアを開く</button>
+    </form>
+
+</body>
+</html>
+

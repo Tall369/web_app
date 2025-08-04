@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>DBビューア</title>
+</head>
+<body>
+    <h1>DBビューア</h1>
+
+    <!-- DBファイル選択 -->
+    <h2>DBファイル選択</h2>
+    <form method="POST" action="{{ url_for('viewer') }}">
+        <label>使用するDBファイル:
+            <select name="db_file" required>
+                <option value="">-- ファイルを選択 --</option>
+                {% for file in db_files %}
+                    <option value="{{ file }}" {% if selected_file and file in selected_file %}selected{% endif %}>{{ file }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit">読み込む</button>
+    </form>
+
+    {% if selected_file %}
+        <hr>
+        <p>現在選択中のDB: <strong>{{ selected_file }}</strong></p>
+
+        <!-- 請求・入金一覧へ -->
+        <form method="GET" action="{{ url_for('db_list') }}">
+            <button type="submit">請求・入金一覧を表示</button>
+        </form>
+
+        <!-- 照合結果一覧へ -->
+        <form method="GET" action="{{ url_for('results') }}">
+            <button type="submit">照合結果一覧を表示</button>
+        </form>
+    {% endif %}
+
+    <hr>
+    <a href="{{ url_for('index') }}">← CSVアップロードページに戻る</a>
+</body>
+</html>
+

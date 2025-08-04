@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>請求・入金一覧</title>
+</head>
+<body>
+    <h1>請求・入金一覧</h1>
+
+    <h2>請求情報</h2>
+    <table border="1" cellpadding="5">
+        <tr>
+            <th>ID</th>
+            <th>顧客名</th>
+            <th>請求金額</th>
+            <th>変換後発注者名カナ</th>
+        </tr>
+        {% for bill in bills %}
+        <tr>
+            <td>{{ bill.id }}</td>
+            <td>{{ bill.顧客名 }}</td>
+            <td>{{ "{:,.0f}".format(bill.請求金額) }}</td>
+            <td>{{ bill.変換後発注者名カナ }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>入金情報</h2>
+    <table border="1" cellpadding="5">
+        <tr>
+            <th>ID</th>
+            <th>支払者名</th>
+            <th>入金金額</th>
+            <th>変換後発注者名</th>
+        </tr>
+        {% for pay in payments %}
+        <tr>
+            <td>{{ pay.id }}</td>
+            <td>{{ pay.支払者名 }}</td>
+            <td>{{ "{:,.0f}".format(pay.入金金額) }}</td>
+            <td>{{ pay.変換後発注者名 }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <hr>
+    <a href="{{ url_for('viewer') }}">← DBビューアに戻る</a>
+</body>
+</html>
+

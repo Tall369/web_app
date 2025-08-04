@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>グループ詳細 - {{ group_id }}</title>
+</head>
+<body>
+    <h1>照合グループ {{ group_id }} の詳細</h1>
+    <table border="1">
+        <tr>
+            <th>タイプ</th>
+            <th>ID</th>
+            <th>名前</th>
+            <th>金額</th>
+            <th>請求日</th>
+            <th>勘定日</th>
+        </tr>
+        {% for row in records %}
+        <tr>
+            <td>{{ row['タイプ'] }}</td>
+            <td>{{ row['ID'] }}</td>
+            <td>{{ row['名前'] }}</td>
+            <td>{{ row['金額'] }}</td>
+            <td>{{ row['請求日'] }}</td>
+            <td>{{ row['勘定日'] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <br>
+    <a href="/match">← 照合結果一覧へ戻る</a>
+</body>
+</html>
+

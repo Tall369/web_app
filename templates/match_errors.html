@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>照合エラー一覧</title>
+</head>
+<body
+<h1>照合できなかった請求情報</h1>
+<table border="1">
+    <tr><th>ID</th><th>顧客名</th><th>請求金額</th></tr>
+    {% for row in bills %}
+    <tr>
+        <td>{{ row["id"] }}</td>
+        <td>{{ row.get("顧客名", "") }}</td>
+        <td>{{ row["金額"] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h1>照合できなかった入金情報</h1>
+<table border="1">
+    <tr><th>ID</th><th>支払者名</th><th>入金金額</th></tr>
+    {% for row in payments %}
+    <tr>
+        <td>{{ row["id"] }}</td>
+        <td>{{ row.get("支払者名", "") }}</td>
+        <td>{{ row["金額"] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+>
+    <br><a href="/match">← 照合結果一覧へ戻る</a>
+    <a href="/match_loose">3. 漏れを緩く照合する</a>>
+</body>
+</html>
+

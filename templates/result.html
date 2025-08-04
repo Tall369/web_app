@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>照合結果</title>
+</head>
+<body>
+    <h1>照合結果一覧</h1>
+    <table border="1">
+        <tr>
+            <th>照合グループID</th>
+            <th>顧客名</th>
+            <th>支払者名</th>
+            <th>請求金額</th>
+            <th>入金金額</th>
+            <th>詳細</th>
+        </tr>
+        {% for row in results %}
+        <tr>
+            <td>{{ row["照合グループID"] }}</td>
+            <td>{{ row["顧客名"] }}</td>
+            <td>{{ row["支払者名"] }}</td>
+            <td>{{ row["請求金額"] }}</td>
+            <td>{{ row["入金金額"] }}</td>
+            <td><a href="{{ url_for('group_detail', group_id=row['照合グループID']) }}">詳細表示</a></td>
+        </tr>
+        {% endfor %}
+    </table>
+    <br>
+    <a href="/match_errors">照合エラー一覧を見る</a>
+    <a href="/">トップへ戻る</a>
+</body>
+</html>
+
