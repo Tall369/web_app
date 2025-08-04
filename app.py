@@ -3,6 +3,7 @@ import pandas as pd
 import sqlite3
 import os
 import re
+import unicodedata
 import itertools
 from collections import defaultdict
 from datetime import datetime
@@ -114,80 +115,119 @@ def upload():
 def normalize_name(name: str) -> str:
     if not name:
         return ""
-    name = re.sub(r'（.*?）', '', name)
-    name = re.sub(r'[,.()（）]', '', name)
-    name = re.sub(r'[ 　]', '', name)
+    name = unicodedata.normalize('NFKC', name)  # 全角→半角
+    name = re.sub(r'（.*?）|\(.*?\)', '', name)  # （ｶ）や(ｶ)削除
+    name = re.sub(r'[,\.\s]', '', name)          # 記号削除
     return name.strip()
 
-def match_one_to_one(bills, payments, tolerance, cur, matched_bills, matched_payments, max_comb):
-    from itertools import combinations
+# 金額一致判定
+def amount_match(amount1: float, amount2: float, tolerance: int = 0) -> bool:
+    try:
+        return abs(float(amount1) - float(amount2)) <= tolerance
+    except (ValueError, TypeError):
+        return False
+
+# 1対1
+def match_one_to_one(bills, payments, tolerance, cur, matched_bills, matched_payments):
     for b_id, b_amt in bills:
         for p_id, p_amt in payments:
             if b_id in matched_bills or p_id in matched_payments:
                 continue
-            if abs(b_amt - p_amt) <= tolerance:
+            if amount_match(b_amt, p_amt, tolerance):
                 cur.execute("INSERT INTO 照合グループ DEFAULT VALUES")
                 gid = cur.lastrowid
-                cur.execute("INSERT INTO 照合結果 (照合グループID, 請求ID, 入金ID) VALUES (?, ?, ?)", (gid, b_id, p_id))
+                cur.execute("INSERT INTO 照合結果 (照合グループID, 請求ID, 入金ID) VALUES (?, ?, ?)",
+                            (gid, b_id, p_id))
                 matched_bills.add(b_id)
                 matched_payments.add(p_id)
-    for p_id, p_amt in payments:
-        if p_id in matched_payments:
-            continue
+    return matched_bills, matched_payments
+
+# N対1
+def match_n_to_1(bills, payments, tolerance, max_comb, cur, matched_bills, matched_payments):
+    for pay_id, pay_amt in payments:
         for r in range(2, min(len(bills), max_comb) + 1):
-            for comb in combinations([b for b in bills if b[0] not in matched_bills], r):
-                if abs(sum(b_amt for _, b_amt in comb) - p_amt) <= tolerance:
+            for comb in itertools.combinations([b for b in bills if b[0] not in matched_bills], r):
+                if amount_match(sum(c[1] for c in comb), pay_amt, tolerance):
                     cur.execute("INSERT INTO 照合グループ DEFAULT VALUES")
                     gid = cur.lastrowid
-                    cur.executemany("INSERT INTO 照合結果 (照合グループID, 請求ID, 入金ID) VALUES (?, ?, ?)", [(gid, bid, p_id) for bid, _ in comb])
-                    matched_bills.update([bid for bid, _ in comb])
-                    matched_payments.add(p_id)
+                    for bid, _ in comb:
+                        cur.execute("INSERT INTO 照合結果 (照合グループID, 請求ID, 入金ID) VALUES (?, ?, ?)",
+                                    (gid, bid, pay_id))
+                        matched_bills.add(bid)
+                    matched_payments.add(pay_id)
                     break
-    for b_id, b_amt in bills:
-        if b_id in matched_bills:
-            continue
+    return matched_bills, matched_payments
+
+# 1対N
+def match_1_to_n(bills, payments, tolerance, max_comb, cur, matched_bills, matched_payments):
+    for bill_id, bill_amt in bills:
         for r in range(2, min(len(payments), max_comb) + 1):
-            for comb in combinations([p for p in payments if p[0] not in matched_payments], r):
-                if abs(sum(p_amt for _, p_amt in comb) - b_amt) <= tolerance:
+            for comb in itertools.combinations([p for p in payments if p[0] not in matched_payments], r):
+                if amount_match(sum(c[1] for c in comb), bill_amt, tolerance):
                     cur.execute("INSERT INTO 照合グループ DEFAULT VALUES")
                     gid = cur.lastrowid
-                    cur.executemany("INSERT INTO 照合結果 (照合グループID, 請求ID, 入金ID) VALUES (?, ?, ?)", [(gid, b_id, pid) for pid, _ in comb])
-                    matched_payments.update([pid for pid, _ in comb])
-                    matched_bills.add(b_id)
+                    for pid, _ in comb:
+                        cur.execute("INSERT INTO 照合結果 (照合グループID, 請求ID, 入金ID) VALUES (?, ?, ?)",
+                                    (gid, bill_id, pid))
+                        matched_payments.add(pid)
+                    matched_bills.add(bill_id)
                     break
     return matched_bills, matched_payments
 
 
-def perform_matching(tolerance, store_unmatched, use_only_unmatched=False, max_comb=None):
-    if max_comb is None:
-        max_comb = MAX_COMB_LOOSE if use_only_unmatched else MAX_COMB_STRICT
+# 改良版 perform_matching
+def perform_matching(tolerance, store_unmatched, use_only_unmatched=False, max_comb=5):
     with get_connection() as conn:
         cur = conn.cursor()
+
+        # 既存結果をクリア
         cur.execute("DELETE FROM 照合結果")
         cur.execute("DELETE FROM 照合グループ")
-        cur.execute("DELETE FROM sqlite_sequence WHERE name='照合グループ'")
+
+        # データ取得
         cur.execute("SELECT id, 変換後発注者名カナ, 請求金額 FROM 請求情報")
         bills_all = cur.fetchall()
         cur.execute("SELECT id, 変換後発注者名, 入金金額 FROM 入金情報")
         payments_all = cur.fetchall()
+
+        # 再照合モード
         if use_only_unmatched:
             bills_all = [b for b in bills_all if b["id"] in session.get("unmatched_bills_ids", [])]
             payments_all = [p for p in payments_all if p["id"] in session.get("unmatched_payments_ids", [])]
+
+        # 名前正規化してグループ化
         grouped_bills = defaultdict(list)
-        grouped_payments = defaultdict(list)
         for b in bills_all:
             grouped_bills[normalize_name(b["変換後発注者名カナ"])].append((b["id"], float(b["請求金額"])))
+        grouped_payments = defaultdict(list)
         for p in payments_all:
             grouped_payments[normalize_name(p["変換後発注者名"])].append((p["id"], float(p["入金金額"])))
+
         matched_bills, matched_payments = set(), set()
+
+        # 1. 1対1
         for name in set(grouped_bills) & set(grouped_payments):
-            matched_bills, matched_payments = match_one_to_one(grouped_bills[name], grouped_payments[name], tolerance, cur, matched_bills, matched_payments, max_comb)
+            matched_bills, matched_payments = match_one_to_one(grouped_bills[name], grouped_payments[name], tolerance, cur, matched_bills, matched_payments)
+
+        # 2. N対1
+        for name in set(grouped_bills) & set(grouped_payments):
+            matched_bills, matched_payments = match_n_to_1(grouped_bills[name], grouped_payments[name], tolerance, max_comb, cur, matched_bills, matched_payments)
+
+        # 3. 1対N
+        for name in set(grouped_bills) & set(grouped_payments):
+            matched_bills, matched_payments = match_1_to_n(grouped_bills[name], grouped_payments[name], tolerance, max_comb, cur, matched_bills, matched_payments)
+
+        # 未照合データ保存
         if store_unmatched:
             session["unmatched_bills_ids"] = [bid for name, bl in grouped_bills.items() for bid, _ in bl if bid not in matched_bills]
             session["unmatched_payments_ids"] = [pid for name, pl in grouped_payments.items() for pid, _ in pl if pid not in matched_payments]
+
         conn.commit()
+
+        # 照合結果取得
         cur.execute('''
-            SELECT g.id AS 照合グループID, c.顧客名, s.支払者名, b.請求金額, p.入金金額
+            SELECT g.id AS 照合グループID, c.顧客名, s.支払者名,
+                   b.請求金額, p.入金金額
             FROM 照合結果 r
             JOIN 請求情報 b ON r.請求ID = b.id
             JOIN 顧客 c ON b.顧客ID = c.顧客ID
@@ -197,7 +237,10 @@ def perform_matching(tolerance, store_unmatched, use_only_unmatched=False, max_c
             ORDER BY g.id
         ''')
         results = cur.fetchall()
+
     return render_template("result.html", results=results)
+
+
 
 @app.route('/match')
 def match():
