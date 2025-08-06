@@ -31,35 +31,62 @@ def create_tables():
     with get_connection() as conn:
         cur = conn.cursor()
         cur.executescript('''
-            CREATE TABLE IF NOT EXISTS 顧客 (
-                顧客ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                顧客名 TEXT UNIQUE
-            );
-            CREATE TABLE IF NOT EXISTS 支払元 (
-                支払ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                支払者名 TEXT UNIQUE
-            );
-            CREATE TABLE IF NOT EXISTS 請求情報 (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                顧客ID INTEGER,
-                請求金額 REAL,
-                変換後発注者名カナ TEXT
-            );
-            CREATE TABLE IF NOT EXISTS 入金情報 (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                支払ID INTEGER,
-                入金金額 REAL,
-                変換後発注者名 TEXT
-            );
-            CREATE TABLE IF NOT EXISTS 照合グループ (
-                id INTEGER PRIMARY KEY AUTOINCREMENT
-            );
-            CREATE TABLE IF NOT EXISTS 照合結果 (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                照合グループID INTEGER,
-                請求ID INTEGER,
-                入金ID INTEGER
-            );
+        CREATE TABLE IF NOT EXISTS 顧客 (
+            顧客ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            顧客名 TEXT UNIQUE
+        );
+
+        CREATE TABLE IF NOT EXISTS 支払元 (
+            支払ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            支払者名 TEXT UNIQUE
+        );
+
+        CREATE TABLE IF NOT EXISTS 請求情報 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            顧客ID INTEGER,
+            受注番号 TEXT,
+            発注者コード TEXT,
+            変換後発注者名 TEXT,
+            変換後発注者名カナ TEXT,
+            請求日 TEXT,
+            入金予定日 TEXT,
+            請求金額 REAL,
+            FOREIGN KEY (顧客ID) REFERENCES 顧客(顧客ID)
+        );
+
+        CREATE TABLE IF NOT EXISTS 入金情報 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            支払ID INTEGER,
+            照会口座 TEXT,
+            番号 TEXT,
+            勘定日 TEXT,
+            起算日 TEXT,
+            出金金額 REAL,
+            入金金額 REAL,
+            小切手区分 TEXT,
+            残高 REAL,
+            取引区分 TEXT,
+            明細区分 TEXT,
+            金融機関名 TEXT,
+            支店名 TEXT,
+            変換後発注者名 TEXT,
+            FOREIGN KEY (支払ID) REFERENCES 支払元(支払ID)
+        );
+
+        CREATE TABLE IF NOT EXISTS 照合グループ (
+            id INTEGER PRIMARY KEY AUTOINCREMENT
+        );
+
+        CREATE TABLE IF NOT EXISTS 照合結果 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            照合グループID INTEGER,
+            請求ID INTEGER,
+            入金ID INTEGER,
+            FOREIGN KEY (照合グループID) REFERENCES 照合グループ(id),
+            FOREIGN KEY (請求ID) REFERENCES 請求情報(id),
+            FOREIGN KEY (入金ID) REFERENCES 入金情報(id)
+        );
+
         ''')
 
 def insert_or_get_id(cur, table, column, value):
@@ -240,11 +267,33 @@ def perform_matching(tolerance, store_unmatched, use_only_unmatched=False, max_c
 
     return render_template("result.html", results=results)
 
-
-
 @app.route('/match')
 def match():
-    return perform_matching(TOLERANCE_STRICT, store_unmatched=True, max_comb=MAX_COMB_STRICT)
+    # 既に結果があるか確認
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM 照合結果")
+        count = cur.fetchone()[0]
+
+    if count == 0:  # 初回だけ計算
+        return perform_matching(TOLERANCE_STRICT, store_unmatched=True, max_comb=MAX_COMB_STRICT)
+    else:  # 以降は即表示
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT g.id AS 照合グループID, c.顧客名, s.支払者名,
+                       b.請求金額, p.入金金額
+                FROM 照合結果 r
+                JOIN 請求情報 b ON r.請求ID = b.id
+                JOIN 顧客 c ON b.顧客ID = c.顧客ID
+                JOIN 入金情報 p ON r.入金ID = p.id
+                JOIN 支払元 s ON p.支払ID = s.支払ID
+                JOIN 照合グループ g ON r.照合グループID = g.id
+                ORDER BY g.id
+            ''')
+            results = cur.fetchall()
+        return render_template("result.html", results=results)
+
 
 @app.route('/match_loose')
 def match_loose():
